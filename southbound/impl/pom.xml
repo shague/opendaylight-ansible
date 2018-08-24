@@ -17,7 +17,8 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
         <relativePath>../../commons/binding-parent</relativePath>
     </parent>
 
-    <artifactId>southbbound-impl</artifactId>
+    <artifactId>southbound-impl</artifactId>
+    <name>ODL :: ansible :: ${project.artifactId}</name>
     <packaging>bundle</packaging>
 
     <dependencies>
@@ -48,6 +49,11 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
             <groupId>org.opendaylight.serviceutils</groupId>
             <artifactId>tools-api</artifactId>
             <version>${serviceutils.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.ops4j.pax.cdi</groupId>
+            <artifactId>pax-cdi-api</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <dependency>

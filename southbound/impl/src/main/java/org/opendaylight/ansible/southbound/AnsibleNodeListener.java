@@ -18,6 +18,7 @@ import org.opendaylight.controller.md.sal.common.api.data.LogicalDatastoreType;
 import org.opendaylight.serviceutils.tools.mdsal.listener.AbstractSyncDataTreeChangeListener;
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.topology.Node;
 import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
+import org.ops4j.pax.cdi.api.OsgiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +27,7 @@ public class AnsibleNodeListener extends AbstractSyncDataTreeChangeListener<Node
     private static final Logger LOG = LoggerFactory.getLogger(AnsibleNodeListener.class);
 
     @Inject
-    public AnsibleNodeListener(final DataBroker dataBroker) {
+    public AnsibleNodeListener(@OsgiService final DataBroker dataBroker) {
         super(dataBroker, LogicalDatastoreType.CONFIGURATION, ANSIBLE_NODE_PATH);
         LOG.info("constructor");
     }

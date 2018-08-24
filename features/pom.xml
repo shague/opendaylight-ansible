@@ -24,7 +24,7 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
     <packaging>pom</packaging>
 
     <modules>
-        <module>odl-ansible</module>
         <module>ansible-features</module>
+        <module>odl-ansible</module>
     </modules>
 </project>

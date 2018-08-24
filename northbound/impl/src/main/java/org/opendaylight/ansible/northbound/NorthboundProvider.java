@@ -20,6 +20,7 @@ import org.opendaylight.ansible.mdsalutils.Datastore;
 import org.opendaylight.ansible.mdsalutils.RetryingManagedNewTransactionRunner;
 import org.opendaylight.controller.md.sal.binding.api.DataBroker;
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.TopologyBuilder;
+import org.ops4j.pax.cdi.api.OsgiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,21 +30,20 @@ public class NorthboundProvider {
     private final RetryingManagedNewTransactionRunner txRunner;
 
     @Inject
-    public NorthboundProvider(final DataBroker dataBroker) {
-        LOG.info("constructor");
+    public NorthboundProvider(@OsgiService final DataBroker dataBroker)
+        throws ExecutionException, InterruptedException {
+
         txRunner = new RetryingManagedNewTransactionRunner(dataBroker, 3);
         initializeAnsibleTopology(CONFIGURATION);
         initializeAnsibleTopology(OPERATIONAL);
     }
 
-    private void initializeAnsibleTopology(Class<? extends Datastore> datastoreType) {
+    private void initializeAnsibleTopology(Class<? extends Datastore> datastoreType)
+        throws ExecutionException, InterruptedException {
+
         TopologyBuilder tpb = new TopologyBuilder();
         tpb.setTopologyId(ANSIBLE_TOPOLOGY_ID);
-        try {
-            txRunner.callWithNewWriteOnlyTransactionAndSubmit(datastoreType,
-                tx -> tx.put(ANSIBLE_TOPOLOGY_PATH, tpb.build())).get();
-        } catch (InterruptedException | ExecutionException e) {
-            LOG.error("NorthboundProvider error initializing ansible topology", e);
-        }
+        txRunner.callWithNewWriteOnlyTransactionAndSubmit(datastoreType,
+            tx -> tx.put(ANSIBLE_TOPOLOGY_PATH, tpb.build())).get();
     }
 }
