@@ -9,7 +9,26 @@ module northbound {
         description "Initial revision.";
     }
 
-    container foo {
-        description "foo";
+    container commands {
+        list command {
+            description "Ansible command";
+            key "name";
+            leaf name {
+                type string;
+                description "Name of ansible command";
+            }
+            leaf host {
+                type string;
+                description "IP/hostname to execute command on";
+            }
+            leaf directory {
+                type string;
+                description "path to execute";
+            }
+            leaf file {
+                type string;
+                description "role/playbook to execute";
+            }
+        }
     }
 }
