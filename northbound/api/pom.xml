@@ -37,7 +37,8 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
                 <configuration>
                     <instructions>
                         <Export-Package>
-                            org.opendaylight.ansible.northbound.api
+                            org.opendaylight.ansible.northbound.api,
+                            org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.*
                         </Export-Package>
                     </instructions>
                 </configuration>
