@@ -27,4 +27,6 @@ public final class AnsibleTopology {
         InstanceIdentifier.create(NetworkTopology.class)
             .child(Topology.class, new TopologyKey(ANSIBLE_TOPOLOGY_ID))
             .child(Node.class);
+
+
 }
