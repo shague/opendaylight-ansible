@@ -29,9 +29,9 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
         <module>features</module>
         <module>karaf</module>
         <module>mdsalutils</module>
+        <module>model</module>
         <module>northbound</module>
         <module>southbound</module>
-        <module>model</module>
     </modules>
 
     <!-- DO NOT install or deploy the pom as it's only needed to initiate a build -->

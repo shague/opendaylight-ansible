@@ -1,9 +1,9 @@
-module ansible {
+module ansible-command {
     yang-version 1;
-    namespace "urn:opendaylight:ansible";
-    prefix "ansible";
+    namespace "urn:opendaylight:ansible:command";
+    prefix "ansible-command";
 
-    description "Ansible northbound api";
+    description "Ansible command api.";
 
     revision "2018-08-21" {
         description "Initial revision.";
@@ -24,13 +24,13 @@ module ansible {
         }
     }
 
-    rpc run-command {
-        description "Run ansible commands";
+    rpc run-ansible-command {
+        description "Run ansible commands.";
         input {
             uses ansible-command-input;
         }
         output {
-            leaf saysomething {
+            leaf status {
                 type string;
             }
         }
