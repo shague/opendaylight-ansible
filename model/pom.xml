@@ -17,21 +17,14 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
         <relativePath/>
     </parent>
 
-    <groupId>org.opendaylight.ansible</groupId>
-    <artifactId>parent</artifactId>
+    <groupId>org.opendaylight.ansible.model</groupId>
+    <artifactId>model</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <name>ODL :: ansible :: ${project.artifactId}</name>
     <packaging>pom</packaging>
 
     <modules>
-        <module>artifacts</module>
-        <module>commons</module>
-        <module>features</module>
-        <module>karaf</module>
-        <module>mdsalutils</module>
-        <module>northbound</module>
-        <module>southbound</module>
-        <module>model</module>
+        <module>ietf-l3vpn-svc</module>
     </modules>
 
     <!-- DO NOT install or deploy the pom as it's only needed to initiate a build -->
