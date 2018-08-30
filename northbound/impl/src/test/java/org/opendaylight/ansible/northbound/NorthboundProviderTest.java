@@ -75,7 +75,7 @@ public class NorthboundProviderTest extends ConstantSchemaAbstractDataBrokerTest
     }
 
     @Test
-    public void testInitializeAnsibleTopology4() throws ReadFailedException {
+    public void testInitializeAnsibleTopology4() {
         RetryingManagedNewTransactionRunner txRunner =
             new RetryingManagedNewTransactionRunner(dataBroker, 3);
         txRunner.callWithNewReadWriteTransactionAndSubmit(CONFIGURATION, tx -> {

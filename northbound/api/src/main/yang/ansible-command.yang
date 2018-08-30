@@ -1,0 +1,38 @@
+module ansible-command {
+    yang-version 1;
+    namespace "urn:opendaylight:ansible:command";
+    prefix "ansible-command";
+
+    description "Ansible command api.";
+
+    revision "2018-08-21" {
+        description "Initial revision.";
+    }
+
+    grouping ansible-command-input {
+        leaf host {
+            description "IP/hostname to execute command on";
+            type string;
+        }
+        leaf directory {
+            description "path to execute";
+            type string;
+        }
+        leaf file {
+            description "role/playbook to execute";
+            type string;
+        }
+    }
+
+    rpc run-ansible-command {
+        description "Run ansible commands.";
+        input {
+            uses ansible-command-input;
+        }
+        output {
+            leaf status {
+                type string;
+            }
+        }
+    }
+}
