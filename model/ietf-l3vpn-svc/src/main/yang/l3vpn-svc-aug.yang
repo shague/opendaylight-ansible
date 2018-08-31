@@ -1,0 +1,27 @@
+module l3vpn-svc-aug {
+    namespace "urn:ietf:params:xml:ns:yang:l3vpn-svc-aug";
+
+    prefix l3vpn-svc-aug;
+
+    import ietf-l3vpn-svc { prefix l3vpn; revision-date 2017-05-02; }
+    import yang-ext { prefix ext; }
+
+    description "ietf-l3vpn-svc augumentations.";
+
+    revision "2018-08-21" {
+        description "Initial revision.";
+    }
+
+    grouping vrf-cfg {
+        leaf vrf-name {
+            type string;
+        }
+    }
+
+    augment "l3vpn:l3vpn-svc/l3vpn:vpn-services/l3vpn:vpn-service" {
+        description "vrf augmentations.";
+        ext:augment-identifier "vrf-aug";
+
+        uses vrf-cfg;
+    }
+}
