@@ -15,6 +15,7 @@ import org.ops4j.pax.cdi.api.OsgiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 @Singleton
 public class SouthboundProvider {
     private static final Logger LOG = LoggerFactory.getLogger(SouthboundProvider.class);
@@ -22,5 +23,7 @@ public class SouthboundProvider {
     @Inject
     public SouthboundProvider(@OsgiService final DataBroker dataBroker) {
         LOG.info("constructor");
+
     }
+
 }
