@@ -22,6 +22,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.MethodRule;
 import org.opendaylight.ansible.mdsalutils.RetryingManagedNewTransactionRunner;
+import org.opendaylight.ansible.northbound.api.IetfL3vpnSvcUtils;
 import org.opendaylight.controller.md.sal.binding.api.DataBroker;
 import org.opendaylight.infrautils.inject.guice.testutils.GuiceRule;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.CommitL3vpnSvcInput;

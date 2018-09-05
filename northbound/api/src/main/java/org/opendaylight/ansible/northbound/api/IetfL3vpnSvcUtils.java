@@ -1,9 +1,8 @@
-package org.opendaylight.ansible.northbound;
+package org.opendaylight.ansible.northbound.api;
 
 import com.google.common.base.Optional;
 import java.util.concurrent.ExecutionException;
 import org.opendaylight.ansible.mdsalutils.Datastore;
-import org.opendaylight.ansible.mdsalutils.Datastore.Operational;
 import org.opendaylight.ansible.mdsalutils.TypedReadWriteTransaction;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.Status;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.StatusL3vpnProvider;
@@ -40,8 +39,8 @@ public final class IetfL3vpnSvcUtils {
         return l3vpn_status;
     }
 
-    protected static void putStatusL3VPN(TypedReadWriteTransaction<? extends Datastore> tx,
-                                       String version, Status status) {
+    public static void putStatusL3VPN(TypedReadWriteTransaction<? extends Datastore> tx,
+                                      String version, Status status) {
         StatusL3vpnProvider statusL3vpnProviderBuilder = new StatusL3vpnProviderBuilder()
             .setProviderState(
                 new ProviderStateBuilder().setStatus(status).setL3vpnSvcVersion(version).build())
