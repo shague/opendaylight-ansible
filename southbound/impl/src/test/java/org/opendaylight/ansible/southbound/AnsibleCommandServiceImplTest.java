@@ -8,15 +8,16 @@
 
 package org.opendaylight.ansible.southbound;
 
+import static org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.Status.InProgress;
+
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import javax.inject.Inject;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.MethodRule;
+import org.opendaylight.controller.md.sal.binding.api.DataBroker;
 import org.opendaylight.infrautils.inject.guice.testutils.GuiceRule;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.AnsibleCommandService;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.RunAnsibleCommandInput;
@@ -33,17 +34,16 @@ public class AnsibleCommandServiceImplTest {
     @Inject
     private AnsibleCommandService ansibleCommandService;
 
-    @Before
-    public void setUp() {
-    }
+    @Inject
+    private DataBroker dataBroker;
 
-    @Ignore
     @Test
-    public void testRunCommand() throws ExecutionException, InterruptedException {
-        LOG.info("testRunCommand about to blow up");
-        RunAnsibleCommandInput input = new RunAnsibleCommandInputBuilder().setDirectory("path")
-            .setFile("file").setHost("localhost").build();
+    public void testRunAnsibleCommand() throws ExecutionException, InterruptedException {
+        RunAnsibleCommandInput input = new RunAnsibleCommandInputBuilder()
+            .setDirectory("./src/test/resources")
+            .setFile("file")
+            .setHost("localhost").build();
         Future<RpcResult<RunAnsibleCommandOutput>> output = ansibleCommandService.runAnsibleCommand(input);
-        Assert.assertEquals(output.get().getResult().getStatus(), "OK");
+        Assert.assertEquals(output.get().getResult().getStatus(), InProgress);
     }
 }

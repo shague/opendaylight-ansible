@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2018 Red Hat, Inc. and others. All rights reserved.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v1.0 which accompanies this distribution,
+ * and is available at http://www.eclipse.org/legal/epl-v10.html
+ */
+
 package org.opendaylight.ansible.northbound.api;
 
 import com.google.common.base.Optional;
@@ -27,16 +35,16 @@ public final class IetfL3vpnSvcUtils {
 
     public static Status getStatus(TypedReadWriteTransaction<? extends Datastore> tx)
         throws ExecutionException, InterruptedException {
-        Status l3vpn_status = null;
+        Status l3vpnStatus = null;
         Optional<StatusL3vpnProvider> optionalStatus = tx.read(STATUS_L3VPN_PATH).get();
         if (optionalStatus.isPresent()) {
             ProviderState providerState = optionalStatus.get().getProviderState();
             if (providerState.getStatus() != null) {
-                l3vpn_status = providerState.getStatus();
+                l3vpnStatus = providerState.getStatus();
             }
         }
 
-        return l3vpn_status;
+        return l3vpnStatus;
     }
 
     public static void putStatusL3VPN(TypedReadWriteTransaction<? extends Datastore> tx,
