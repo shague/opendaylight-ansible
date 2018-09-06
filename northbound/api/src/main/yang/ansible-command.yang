@@ -40,10 +40,11 @@ module ansible-command {
             description "path to execute";
             type string;
         }
-        leaf file {
-            description "role/playbook to execute";
+        leaf-list ansible-vars {
+            description "extra variables to pass to ansible in a key=value format";
             type string;
         }
+
     }
 
     grouping ansible-command-output {
@@ -63,6 +64,24 @@ module ansible-command {
         description "Run ansible commands.";
         input {
             uses ansible-command-input;
+            choice command-type {
+                case playbook {
+                    leaf file {
+                        description "playbook to execute";
+                        type string;
+                    }
+                }
+                case role {
+                    leaf role-name {
+                        description "role to execute";
+                        type string;
+                    }
+                    leaf-list role-vars {
+                        description "variables to pass into the role written in key=value format";
+                        type string;
+                    }
+                }
+            }
         }
         output {
             uses ansible-command-output;
