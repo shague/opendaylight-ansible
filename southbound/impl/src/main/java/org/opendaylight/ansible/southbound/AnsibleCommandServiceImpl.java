@@ -15,6 +15,8 @@ import ch.vorburger.exec.ManagedProcessBuilder;
 import ch.vorburger.exec.ManagedProcessException;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +34,8 @@ import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.S
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.commands.Command;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.commands.CommandBuilder;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.commands.CommandKey;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.run.ansible.command.input.command.type.Playbook;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.run.ansible.command.input.command.type.Role;
 import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
 import org.opendaylight.yangtools.yang.common.RpcResult;
 import org.opendaylight.yangtools.yang.common.RpcResultBuilder;
@@ -44,6 +48,14 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
     private static final Logger LOG = LoggerFactory.getLogger(AnsibleCommandServiceImpl.class);
     private Map<Uuid, ManagedProcess> processMap = new ConcurrentHashMap<>();
     private final DataBroker dataBroker;
+    private static final String ANSIBLEVAR = "ANSIBLEVAR";
+    private static final String ROLEVAR = "ROLEVAR";
+    private static final Map<String, String> VAR_MAP = new HashMap<String, String>() {
+        {
+            put(ANSIBLEVAR, "--cmdline");
+            put(ROLEVAR, "--role-vars");
+        }
+    };
 
     @Inject
     public AnsibleCommandServiceImpl(@OsgiService final DataBroker dataBroker) {
@@ -56,7 +68,17 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
         Status status;
         String failedEvent;
         try {
-            uuid = runAnsible(input.getHost(), input.getDirectory(), input.getFile());
+            if (input.getCommandType() instanceof Playbook) {
+                uuid = runAnsiblePlaybook(input.getHost(), input.getDirectory(),
+                        ((Playbook) input.getCommandType()).getFile(),
+                        input.getAnsibleVars());
+            } else {
+                // Must be instance of Role
+                uuid = runAnsibleRole(input.getHost(), input.getDirectory(),
+                        ((Role) input.getCommandType()).getRoleName(),
+                        ((Role) input.getCommandType()).getRoleVars(),
+                        input.getAnsibleVars());
+            }
             status = Status.InProgress;
             failedEvent = null;
 
@@ -69,14 +91,30 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
                 .setFailedEvent(failedEvent).build()).buildFuture();
     }
 
-    private Uuid runAnsible(String host, String dir, String file) throws ManagedProcessException {
-        Uuid uuid = new Uuid(UUID.randomUUID().toString());
-        LOG.info("Executing Ansible, new uuid for command is: " + uuid);
+    private Uuid runAnsibleRole(String host, String dir, String role, List<String> roleVars, List<String> ansibleVars)
+            throws ManagedProcessException {
+        ManagedProcessBuilder ar = new ManagedProcessBuilder("ansible-runner").addArgument("-j")
+                .addArgument("--hosts").addArgument(host).addArgument("-r").addArgument(role);
+        ar = injectVars(ar, ROLEVAR, roleVars);
+        ar = injectVars(ar, ANSIBLEVAR, ansibleVars);
+        ar.addArgument("run").addArgument(dir);
+        return runAnsible(ar);
+    }
+
+    private Uuid runAnsiblePlaybook(String host, String dir, String file, List<String> ansibleVars)
+            throws ManagedProcessException {
         ManagedProcessBuilder ar = new ManagedProcessBuilder("ansible-runner").addArgument("-j")
                 .addArgument("--hosts").addArgument(host).addArgument("-p").addArgument(file);
+        ar = injectVars(ar, ANSIBLEVAR, ansibleVars);
         ar.addArgument("run").addArgument(dir);
-        ar.setProcessListener(new AnsibleProcessListener(this, uuid));
-        ManagedProcess mp = ar.build();
+        return runAnsible(ar);
+    }
+
+    private Uuid runAnsible(ManagedProcessBuilder builder) {
+        Uuid uuid = new Uuid(UUID.randomUUID().toString());
+        LOG.info("Executing Ansible, new uuid for command is: {}", uuid);
+        builder.setProcessListener(new AnsibleProcessListener(this, uuid));
+        ManagedProcess mp = builder.build();
         processMap.put(uuid, mp);
         LOG.info("Starting Ansible process");
         try {
@@ -86,6 +124,22 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
             LOG.warn("Process exited with error code: {}", mp.getProcLongName());
         }
         return uuid;
+    }
+
+    private ManagedProcessBuilder injectVars(ManagedProcessBuilder builder, String varType, List<String> varList) {
+        if (varList != null && ! varList.isEmpty()) {
+            if (VAR_MAP.get(varType) == null) {
+                LOG.warn("Unable to determine variable types to add to ansible command {}", varType);
+            } else {
+                builder.addArgument(VAR_MAP.get(varType));
+                if (varType.equals(ANSIBLEVAR)) {
+                    builder.addArgument("'-e" + " " + String.join(" ", varList) + "'", false);
+                } else {
+                    builder.addArgument(String.join(" ", varList));
+                }
+            }
+        }
+        return builder;
     }
 
     public void parseAnsibleResult(Uuid uuid) throws AnsibleCommandException {

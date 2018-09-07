@@ -23,6 +23,8 @@ import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.A
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.RunAnsibleCommandInput;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.RunAnsibleCommandInputBuilder;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.RunAnsibleCommandOutput;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.run.ansible.command.input.command.type.Playbook;
+import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.run.ansible.command.input.command.type.PlaybookBuilder;
 import org.opendaylight.yangtools.yang.common.RpcResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,9 +41,10 @@ public class AnsibleCommandServiceImplTest {
 
     @Test
     public void testRunAnsibleCommand() throws ExecutionException, InterruptedException {
+        Playbook playbook = new PlaybookBuilder().setFile("file").build();
         RunAnsibleCommandInput input = new RunAnsibleCommandInputBuilder()
             .setDirectory("./src/test/resources")
-            .setFile("file")
+            .setCommandType(playbook)
             .setHost("localhost").build();
         Future<RpcResult<RunAnsibleCommandOutput>> output = ansibleCommandService.runAnsibleCommand(input);
         Assert.assertEquals(output.get().getResult().getStatus(), InProgress);
