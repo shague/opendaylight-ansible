@@ -1,5 +1,13 @@
 language: java
-
+sudo: false
+os:
+  - linux
+cache:
+ directories:
+   - $HOME/.m2
 jdk:
   - openjdk8
-  - oraclejdk8
+
+install: mvn -s settings.xml install -DskipTests=true -Dmaven.javadoc.skip=true -B -V
+
+script: mvn -s settings.xml install -DskipTests=true -Dmaven.javadoc.skip=true -B -V
