@@ -53,6 +53,6 @@ public final class IetfL3vpnSvcUtils {
             .setProviderState(
                 new ProviderStateBuilder().setStatus(status).setL3vpnSvcVersion(version).build())
             .build();
-        tx.put(STATUS_L3VPN_PATH, statusL3vpnProviderBuilder);
+        tx.put(STATUS_L3VPN_PATH, statusL3vpnProviderBuilder, true);
     }
 }
