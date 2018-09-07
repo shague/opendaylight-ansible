@@ -1,6 +1,7 @@
-# opendaylight-ansible
+[![Build Status](https://travis-ci.org/shague/opendaylight-ansible.svg?branch=master)](https://travis-ci.org/shague/opendaylight-ansible)
+[![License](https://img.shields.io/badge/License-EPL%201.0-blue.svg)](https://opensource.org/licenses/EPL-1.0)
 
-Travis-CI
+# opendaylight-ansible
 
 ## Executing Ansible Playbooks
 
