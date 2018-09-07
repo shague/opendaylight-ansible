@@ -17,6 +17,7 @@ import javax.inject.Singleton;
 import org.opendaylight.ansible.mdsalutils.RetryingManagedNewTransactionRunner;
 import org.opendaylight.ansible.northbound.api.IetfL3vpnSvcUtils;
 import org.opendaylight.controller.md.sal.binding.api.DataBroker;
+import org.opendaylight.infrautils.utils.concurrent.ListenableFutures;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.CommitL3vpnSvcInput;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.CommitL3vpnSvcOutput;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.CommitL3vpnSvcOutputBuilder;
@@ -41,9 +42,10 @@ public class IetfL3vpnSvcServiceImpl implements IetfL3vpnSvcService {
 
     @Override
     public ListenableFuture<RpcResult<CommitL3vpnSvcOutput>> commitL3vpnSvc(CommitL3vpnSvcInput input) {
-        txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx -> {
-            IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, InProgress);
-        });
+        ListenableFutures.checkedGet(
+            txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx -> {
+                IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, InProgress);
+            }), null);
 
         return RpcResultBuilder.success(
             new CommitL3vpnSvcOutputBuilder().setL3vpnSvcVersion(COMMIT_VERSION).build()).buildFuture();

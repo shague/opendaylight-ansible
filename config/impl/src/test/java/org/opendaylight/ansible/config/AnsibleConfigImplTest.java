@@ -11,6 +11,7 @@ package org.opendaylight.ansible.config;
 import javax.inject.Inject;
 import org.junit.Assert;
 import org.junit.Rule;
+import org.junit.Test;
 import org.junit.rules.MethodRule;
 import org.opendaylight.ansible.config.api.AnsibleConfig;
 import org.opendaylight.infrautils.inject.guice.testutils.GuiceRule;
@@ -21,6 +22,7 @@ public class AnsibleConfigImplTest {
     @Inject
     private AnsibleConfig ansibleConfig;
 
+    @Test
     public void testGetAnsibleConfig() {
         Assert.assertEquals(ansibleConfig.getAnsibleRunnerName(), "ansible-runner");
         Assert.assertEquals(ansibleConfig.getAnsibleRunnerPath(), ".");
