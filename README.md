@@ -36,4 +36,4 @@ Additionally, Ansible variables may be provided which can set things like the SS
  In order to execute an Ansible role directly, the `role-name` must be provided, and optionally, any role variables
  to be set for the role via `role-vars`. For example:
  
-`curl -u admin:admin -X POST -H "Content-Type: application/json" 127.0.0.1:8181/restconf/operations/ansible-command:run-ansible-command -d '{"input": {"host":"192.168.10.100", "ansible-vars": ["ansible_user=redhat", "ansible_ssh_pass=redhat", "ansible_connection=network_cli", "ansible_network_os=ios"], "directory":"/tmp/test", "file":"test.yaml"}}'`
+`curl -u admin:admin -X POST -H "Content-Type: application/json" 127.0.0.1:8181/restconf/operations/ansible-command:run-ansible-command -d '{"input": {"host":"192.168.10.100", "ansible-vars": ["ansible_user=redhat", "ansible_ssh_pass=redhat", "ansible_connection=network_cli", "ansible_network_os=ios"], "directory":"/tmp/test", "role-vars": ["blah=dummy", "test=hello"], "role-name":"ansible-network.cisco_ios"}}'`
