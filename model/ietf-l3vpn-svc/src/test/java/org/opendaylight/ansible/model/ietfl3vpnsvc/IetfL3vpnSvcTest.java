@@ -13,6 +13,8 @@ import static org.junit.Assert.assertTrue;
 import static org.opendaylight.ansible.mdsalutils.Datastore.CONFIGURATION;
 
 import com.google.common.base.Optional;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import org.junit.Before;
 import org.junit.Test;
@@ -22,10 +24,21 @@ import org.opendaylight.ansible.mdsalutils.TypedReadWriteTransaction;
 import org.opendaylight.controller.md.sal.binding.api.DataBroker;
 import org.opendaylight.controller.md.sal.binding.test.ConstantSchemaAbstractDataBrokerTest;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.SvcId;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.Sites;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.VpnServices;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.Site;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.SiteBuilder;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.SiteKey;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.site.SiteNetworkAccesses;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.site.SiteNetworkAccessesBuilder;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.site.site.network.accesses.SiteNetworkAccess;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.site.site.network.accesses.SiteNetworkAccessBuilder;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.vpn.services.VpnService;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.vpn.services.VpnServiceBuilder;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.vpn.services.VpnServiceKey;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.aug.rev170502.PeAugmentation;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.aug.rev170502.PeAugmentationBuilder;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.NodeId;
 import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +102,44 @@ public class IetfL3vpnSvcTest extends ConstantSchemaAbstractDataBrokerTest {
             Optional<VpnService> vpnServiceOptional = getVpnService(tx, vpnId);
             assertTrue(vpnServiceOptional.isPresent());
             assertEquals(vpnServiceOptional.get().getCustomerName(), customerName);
+        });
+    }
+
+    @Test
+    public void testSites() {
+        PeAugmentation peAugmentation =
+            new PeAugmentationBuilder().setPeNodeId(NodeId.getDefaultInstance("node1")).build();
+        SiteNetworkAccess siteNetworkAccess =
+            new SiteNetworkAccessBuilder()
+                .setSiteNetworkAccessId(SvcId.getDefaultInstance("pe1"))
+                .addAugmentation(PeAugmentation.class, peAugmentation)
+                .build();
+        List<SiteNetworkAccess> siteNetworkAccessList = new ArrayList<>();
+        siteNetworkAccessList.add(siteNetworkAccess);
+        SiteNetworkAccesses siteNetworkAccesses =
+            new SiteNetworkAccessesBuilder().setSiteNetworkAccess(siteNetworkAccessList).build();
+        Site site = new SiteBuilder()
+            .setSiteId(SvcId.getDefaultInstance("site1"))
+            .setSiteNetworkAccesses(siteNetworkAccesses)
+            .build();
+
+        SiteKey siteKey = new SiteKey(SvcId.getDefaultInstance("site1"));
+        InstanceIdentifier<Site> sitePath = InstanceIdentifier.create(Sites.class).child(Site.class, siteKey);
+
+        RetryingManagedNewTransactionRunner txRunner =
+            new RetryingManagedNewTransactionRunner(dataBroker, 3);
+        txRunner.callWithNewReadWriteTransactionAndSubmit(CONFIGURATION, tx -> {
+            tx.put(sitePath, site);
+        });
+
+        txRunner.callWithNewReadWriteTransactionAndSubmit(CONFIGURATION, tx -> {
+            Optional<Site> siteOptional = tx.read(sitePath).get();
+            assertTrue(siteOptional.isPresent());
+            assertEquals(siteOptional.get().getSiteId().getValue(), "site1");
+            List<SiteNetworkAccess> siteNetworkAccessList2 =
+                siteOptional.get().getSiteNetworkAccesses().getSiteNetworkAccess();
+            PeAugmentation peAugmentation2 = siteNetworkAccessList2.get(0).augmentation(PeAugmentation.class);
+            assertEquals(peAugmentation2.getPeNodeId().getValue(), "node1");
         });
     }
 }
