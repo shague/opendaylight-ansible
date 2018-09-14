@@ -13,7 +13,9 @@ import static org.opendaylight.ansible.mdsalutils.Datastore.OPERATIONAL;
 import ch.vorburger.exec.ManagedProcess;
 import ch.vorburger.exec.ManagedProcessBuilder;
 import ch.vorburger.exec.ManagedProcessException;
+import com.google.common.base.Optional;
 import com.google.common.util.concurrent.ListenableFuture;
+import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -23,7 +25,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import org.opendaylight.ansible.mdsalutils.RetryingManagedNewTransactionRunner;
+import org.opendaylight.ansible.mdsalutils.SingleTransactionDataBroker;
 import org.opendaylight.controller.md.sal.binding.api.DataBroker;
+import org.opendaylight.controller.md.sal.common.api.data.LogicalDatastoreType;
+import org.opendaylight.controller.md.sal.common.api.data.ReadFailedException;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.yang.types.rev130715.Uuid;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.AnsibleCommandService;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.Commands;
@@ -56,10 +61,13 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
             put(ROLEVAR, "--role-vars");
         }
     };
+    private final RetryingManagedNewTransactionRunner txRunner;
+    private static final String DEFAULT_PRIVATE_DIR = "/tmp/odl_ansible";
 
     @Inject
     public AnsibleCommandServiceImpl(@OsgiService final DataBroker dataBroker) {
         this.dataBroker = dataBroker;
+        txRunner = new RetryingManagedNewTransactionRunner(dataBroker, 3);
     }
 
     @Override
@@ -81,8 +89,9 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
             }
             status = Status.InProgress;
             failedEvent = null;
+            initCommandStatus(uuid);
 
-        } catch (ManagedProcessException e) {
+        } catch (ManagedProcessException | IOException e) {
             status = Status.Failed;
             uuid = null;
             failedEvent = e.getMessage();
@@ -91,8 +100,24 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
                 .setFailedEvent(failedEvent).build()).buildFuture();
     }
 
-    private Uuid runAnsibleRole(String host, String dir, String role, List<String> roleVars, List<String> ansibleVars)
-            throws ManagedProcessException {
+    public void initCommandStatus(Uuid uuid) {
+        updateAnsibleResult(Status.InProgress, null, uuid);
+    }
+
+    public Uuid runAnsibleRole(String host, String dir, String role, List<String> roleVars, List<String> ansibleVars)
+            throws ManagedProcessException, IOException {
+        if (dir == null) {
+            LOG.info("No directory provided, using default: {}", DEFAULT_PRIVATE_DIR);
+            dir = DEFAULT_PRIVATE_DIR;
+        }
+        // Ensure private directory is created
+        File directory = new File(dir);
+        if (! directory.exists()) {
+            boolean dirCreated = directory.mkdirs();
+            if (!dirCreated) {
+                throw new IOException("Unable to create Ansible private directory: " + dir);
+            }
+        }
         ManagedProcessBuilder ar = new ManagedProcessBuilder("ansible-runner").addArgument("-j")
                 .addArgument("--hosts").addArgument(host).addArgument("-r").addArgument(role);
         ar = injectVars(ar, ROLEVAR, roleVars);
@@ -135,7 +160,7 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
                 if (varType.equals(ANSIBLEVAR)) {
                     builder.addArgument("'-e" + " " + String.join(" ", varList) + "'", false);
                 } else {
-                    builder.addArgument(String.join(" ", varList));
+                    builder.addArgument(String.join(" ", varList), false);
                 }
             }
         }
@@ -203,7 +228,6 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
         CommandKey cmdKey = new CommandKey(uuid);
         InstanceIdentifier<Command> cmdPath = InstanceIdentifier.create(Commands.class).child(Command.class, cmdKey);
         Command cmd = new CommandBuilder().setStatus(result).setFailedEvent(failedEvent).setUuid(uuid).build();
-        RetryingManagedNewTransactionRunner txRunner = new RetryingManagedNewTransactionRunner(dataBroker, 3);
         txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx -> {
             tx.put(cmdPath, cmd);
         });
@@ -214,5 +238,36 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
             return processMap.get(uuid);
         }
         return null;
+    }
+
+    public Status getAnsibleResult(Uuid uuid) {
+        Optional<Command> optCmdResult;
+        CommandKey cmdKey = new CommandKey(uuid);
+        InstanceIdentifier<Command> cmdPath = InstanceIdentifier.create(Commands.class).child(Command.class, cmdKey);
+        try {
+            optCmdResult = SingleTransactionDataBroker.syncReadOptional(dataBroker, LogicalDatastoreType.OPERATIONAL,
+                    cmdPath);
+            if (optCmdResult.isPresent()) {
+                return optCmdResult.get().getStatus();
+            }
+
+        } catch (ReadFailedException e) {
+            return null;
+        }
+        return null;
+    }
+
+    public boolean isAnsibleComplete(Uuid uuid) {
+        if (getAnsibleResult(uuid) != null && getAnsibleResult(uuid) != Status.InProgress) {
+            return true;
+        }
+        return false;
+    }
+
+    public boolean ansibleCommandSucceeded(Uuid uuid) {
+        if (isAnsibleComplete(uuid) &&  getAnsibleResult(uuid) == Status.Complete) {
+            return true;
+        }
+        return false;
     }
 }

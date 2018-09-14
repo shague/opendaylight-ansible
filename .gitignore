@@ -14,6 +14,8 @@ target
 .settings
 MANIFEST.MF
 opendaylight/northbound/integrationtest/logs/*
+southbound/impl/src/test/resources/artifacts/
+southbound/impl/src/test/resources/inventory/
 *.ipr
 *.iml
 *.iws
@@ -24,6 +26,7 @@ log.html
 output.xml
 report.html
 *.swp
+*.swo
 target-ide/
 .tox
 .vagrant

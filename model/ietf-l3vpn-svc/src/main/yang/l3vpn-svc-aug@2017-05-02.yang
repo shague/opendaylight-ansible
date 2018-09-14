@@ -145,6 +145,11 @@ module l3vpn-svc-aug {
         type string;
         description "The hardware device type.";
     }
+
+    leaf pe-mgmt-ip {
+        type inet:ipv4-address;
+        description "Address for control plane management of the PE device";
+    }
   }
 
   augment "l3vpn:l3vpn-svc/l3vpn:vpn-services/l3vpn:vpn-service" {
