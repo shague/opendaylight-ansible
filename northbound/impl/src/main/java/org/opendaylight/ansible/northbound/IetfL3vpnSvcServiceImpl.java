@@ -9,6 +9,7 @@
 package org.opendaylight.ansible.northbound;
 
 import static org.opendaylight.ansible.mdsalutils.Datastore.OPERATIONAL;
+import static org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.Status.DeleteInProgress;
 import static org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.Status.InProgress;
 
 import com.google.common.util.concurrent.ListenableFuture;
@@ -21,6 +22,9 @@ import org.opendaylight.infrautils.utils.concurrent.ListenableFutures;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.CommitL3vpnSvcInput;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.CommitL3vpnSvcOutput;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.CommitL3vpnSvcOutputBuilder;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.DeleteL3vpnSvcInput;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.DeleteL3vpnSvcOutput;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.DeleteL3vpnSvcOutputBuilder;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.IetfL3vpnSvcService;
 import org.opendaylight.yangtools.yang.common.RpcResult;
 import org.opendaylight.yangtools.yang.common.RpcResultBuilder;
@@ -49,5 +53,16 @@ public class IetfL3vpnSvcServiceImpl implements IetfL3vpnSvcService {
 
         return RpcResultBuilder.success(
             new CommitL3vpnSvcOutputBuilder().setL3vpnSvcVersion(COMMIT_VERSION).build()).buildFuture();
+    }
+
+    @Override
+    public ListenableFuture<RpcResult<DeleteL3vpnSvcOutput>> deleteL3vpnSvc(DeleteL3vpnSvcInput input) {
+        ListenableFutures.checkedGet(
+                txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx -> {
+                    IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, DeleteInProgress);
+                }), null);
+
+        return RpcResultBuilder.success(
+                new DeleteL3vpnSvcOutputBuilder().setL3vpnSvcVersion(COMMIT_VERSION).build()).buildFuture();
     }
 }

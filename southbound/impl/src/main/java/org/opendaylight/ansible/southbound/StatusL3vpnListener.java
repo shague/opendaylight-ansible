@@ -10,9 +10,12 @@ package org.opendaylight.ansible.southbound;
 
 import static org.opendaylight.ansible.mdsalutils.Datastore.OPERATIONAL;
 import static org.opendaylight.ansible.northbound.api.IetfL3vpnSvcUtils.STATUS_L3VPN_PATH;
+import static org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.Status.DeleteInProgress;
 import static org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.Status.InProgress;
 
 import ch.vorburger.exec.ManagedProcessException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Optional;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -21,8 +24,11 @@ import com.google.common.util.concurrent.MoreExecutors;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import javax.annotation.Nonnull;
@@ -40,10 +46,14 @@ import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.r
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.Status;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.StatusL3vpnProvider;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.Sites;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.VpnServices;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.Site;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.site.site.network.accesses.SiteNetworkAccess;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.vpn.services.VpnService;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.yang.types.rev130715.Uuid;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.aug.rev170502.PeAugmentation;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.aug.rev170502.VrfAugmentation;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.aug.rev170502.VrfName;
 import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
 import org.ops4j.pax.cdi.api.OsgiService;
 import org.slf4j.Logger;
@@ -59,6 +69,17 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
     private org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.command.rev180821.Status ansibleStatus;
     private ListeningExecutorService executor;
     private static ListenableFuture<List<Uuid>> l3vpnCommands;
+    private Map<String, String> routeTargets = new HashMap<>();
+
+    private enum State {
+        PRESENT,
+        ABSENT;
+
+        @Override
+        public String toString() {
+            return super.toString().toLowerCase(Locale.ENGLISH);
+        }
+    }
 
     @Inject
     public StatusL3vpnListener(@OsgiService final DataBroker dataBroker,
@@ -78,8 +99,18 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
             try {
                 if (IetfL3vpnSvcUtils.getStatus(tx) == InProgress) {
                     LOG.info("Creating VPN");
-                    IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, createVpn());
+                    Status status = configureVpn(State.PRESENT);
+                    if (status != IetfL3vpnSvcUtils.getStatus(tx)) {
+                        IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, status);
+                    }
                     LOG.info("VPN is being created");
+                } else if (IetfL3vpnSvcUtils.getStatus(tx) == DeleteInProgress) {
+                    LOG.info("Deleting VPN");
+                    Status status = configureVpn(State.ABSENT);
+                    if (status != IetfL3vpnSvcUtils.getStatus(tx)) {
+                        IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, status);
+                    }
+                    LOG.info("VPN is being deleted");
                 }
             } catch (ExecutionException e) {
                 LOG.error("Unable to determine status of L3VPN");
@@ -102,10 +133,35 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
     public void update(@Nonnull InstanceIdentifier<StatusL3vpnProvider> instanceIdentifier,
                        @Nonnull StatusL3vpnProvider oldStatusL3vpn, @Nonnull StatusL3vpnProvider newStatusL3vpn) {
         LOG.info("update: id: {}\nold: {}\nnew: {}", instanceIdentifier, oldStatusL3vpn, newStatusL3vpn);
-        // ain't nobody got time to for this
+        txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx -> {
+            try {
+                if (IetfL3vpnSvcUtils.getStatus(tx) == InProgress) {
+                    LOG.info("Updating VPN");
+                    Status status = configureVpn(State.PRESENT);
+                    if (status != IetfL3vpnSvcUtils.getStatus(tx)) {
+                        IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, status);
+                    }
+                    LOG.info("VPN is being updated");
+                } else if (IetfL3vpnSvcUtils.getStatus(tx) == DeleteInProgress) {
+                    LOG.info("Deleting VPN");
+                    Status status = configureVpn(State.ABSENT);
+                    if (status != IetfL3vpnSvcUtils.getStatus(tx)) {
+                        IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, status);
+                    }
+                    LOG.info("VPN is being deleted");
+                }
+            } catch (ExecutionException e) {
+                LOG.error("Unable to determine status of L3VPN");
+                IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, Status.Failed);
+            } catch (AnsibleCommandException e) {
+                LOG.error("L3 VPN provisioning failed. Ansible southbound Command failed: {}", e.getMessage());
+                IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, Status.Failed);
+            }
+
+        });
     }
 
-    private Status createVpn() throws AnsibleCommandException, L3vpnConfigException {
+    private Status configureVpn(State state) throws AnsibleCommandException, L3vpnConfigException {
         Optional<L3vpnSvc> optL3vpnSvc;
         L3vpnSvc l3vpnSvc;
         try {
@@ -130,11 +186,28 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
             LOG.error("L3 VPN config missing sites configuration");
             throw new L3vpnConfigException("L3 VPN config missing sites");
         }
+
+        // Find VRF name
+        VpnServices vpnServices = l3vpnSvc.getVpnServices();
+        if (vpnServices == null) {
+            LOG.error("L3 VPN services config is missing");
+            throw new L3vpnConfigException("L3 VPN services config is missing");
+        }
+        List<VpnService> vpnServiceList = vpnServices.getVpnService();
+        if (vpnServiceList == null || vpnServiceList.isEmpty()) {
+            LOG.error("L3 VPN missing vpn service config");
+            throw new L3vpnConfigException("L3 VPN missing vpn service config");
+        }
+        // Assume one vpn service specified for demo
+        VrfAugmentation vrfAug = vpnServiceList.get(0).augmentation(VrfAugmentation.class);
+
         List<Site> siteList = sites.getSite();
         if (siteList == null || siteList.isEmpty()) {
             LOG.error("L3 VPN config missing sites configuration");
             throw new L3vpnConfigException("L3 VPN config missing site configuration");
         }
+
+        determineRouteTargets(vrfAug);
 
         for (Site site: siteList) {
             if (site == null) {
@@ -142,33 +215,38 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
                 continue;
             }
             LOG.info("Examining site {}", site.toString());
-            cmdFutures.add(configureSite(site));
+            // TODO(trozet): Add method to check here if this site has a vpn attachment to the requested vpnservice
+            cmdFutures.add(configureSite(site, vrfAug, state));
         }
 
         l3vpnCommands = Futures.successfulAsList(cmdFutures);
         l3vpnCommands.addListener(() -> {
             try {
-                l3vpnCommands.get().forEach(uuid -> {
-                    if (uuid == null) {
-                        txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx ->
+                if (l3vpnCommands.get().contains(null)) {
+                    txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx ->
                             IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, Status.Failed)
-                        );
-                        return;
-                    }
-                });
-                txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx ->
-                    IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, Status.Complete)
-                );
+                    );
+                } else {
+                    txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx ->
+                            IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, Status.Complete)
+                    );
+                }
             } catch (InterruptedException | ExecutionException e) {
                 txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx ->
                     IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, Status.Failed)
                 );
             }
         }, executor);
-        return Status.InProgress;
+
+        if (state == State.ABSENT) {
+            return Status.DeleteInProgress;
+        } else {
+            return Status.InProgress;
+        }
     }
 
-    private ListenableFuture<Uuid> configureSite(Site site) throws AnsibleCommandException, L3vpnConfigException {
+    private ListenableFuture<Uuid> configureSite(Site site, VrfAugmentation vrfAug, State state) throws
+            AnsibleCommandException, L3vpnConfigException {
         // Find management info for Ansible
         final PeAugmentation sitePeAccess;
         List<SiteNetworkAccess> access = site.getSiteNetworkAccesses().getSiteNetworkAccess();
@@ -178,6 +256,7 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
         final String provider;
         final String networkOS;
         final Uuid siteCmdId;
+        final String role = "ansible-network.l3vpn";
 
         LOG.info("Configuring site: {}", site.toString());
         if (access == null || access.isEmpty()) {
@@ -189,8 +268,47 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
         sitePeAccess = access.get(0).augmentation(PeAugmentation.class);
         LOG.info("Site access is: " + sitePeAccess.toString());
         // Find role vars VPN configuration
-        // TODO(trozet): search for these values once we know what we need, for now hardcode
-        roleVars = Arrays.asList("dummy=value", "dummy2=value2");
+        ObjectMapper objectMapper = new ObjectMapper();
+        String roleSiteVar;
+        try {
+            roleSiteVar = objectMapper.writeValueAsString(Arrays.asList(new L3vpnSiteConfig(access.get(0))));
+        } catch (JsonProcessingException e) {
+            throw new L3vpnConfigException("Unable to translate L3 Site Config into Ansible Config: " + e);
+        }
+        Long peAs = sitePeAccess.getPeBgpAs();
+        if (peAs == null) {
+            throw new L3vpnConfigException("Must specify Autonomous System value in pe-bgp-as");
+        }
+        // Find RD
+        String rd;
+        try {
+            rd = vrfAug.getRouteDistinguisher().getAs().toString() + ":" + vrfAug.getRouteDistinguisher().getAsIndex()
+                    .toString();
+        } catch (NullPointerException e) {
+            rd = randomRdRt();
+        }
+        VrfName vrfName = vrfAug.getVrfName();
+        if (vrfName == null) {
+            throw new L3vpnConfigException("vrf-name must be provided as part of vpn-service configuration");
+        }
+        // Find RT import
+        String importRt;
+        try {
+            importRt = vrfAug.getImportRouteTargets().getRouteTarget().getAs().toString() + ":"
+                    + vrfAug.getImportRouteTargets().getRouteTarget().getAsIndex().toString();
+        } catch (NullPointerException e) {
+            importRt = routeTargets.get(vrfName.getValue());
+        }
+
+        roleVars = Arrays.asList(
+                "l3vpn_state=" + state.toString(),
+                "l3vpn_name=" + vrfName.getValue(),
+                "l3vpn_rd=" + rd,
+                "l3vpn_rt_import=" + importRt,
+                "l3vpn_rt_export=" + routeTargets.get(vrfName.getValue()),
+                "l3vpn_bgp_as=" + peAs.toString(),
+                "l3vpn_sites=" + roleSiteVar
+                );
 
         LOG.info("Role vars are: {}", roleVars);
         Ipv4Address peMgmtIp = sitePeAccess.getPeMgmtIp();
@@ -215,12 +333,14 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
                 "ansible_ssh_pass=" + sitePeAccess.getPassword(),
                 "ansible_connection=network_cli",
                 "ansible_network_os=" + networkOS,
-                "ansible_network_provider=" + provider
+                "ansible_network_provider=" + provider,
+                "inventory_hostname=" + access.get(0).getSiteNetworkAccessId().getValue(),
+                "inventory_hostname_short=" + access.get(0).getSiteNetworkAccessId().getValue()
                 );
         // Call Ansible Command
         LOG.info("Executing VPN site configuration for host {}", peMgmtIp.getValue());
         try {
-            siteCmdId = ansibleCommandService.runAnsibleRole(peMgmtIp.getValue(), null, provider, roleVars,
+            siteCmdId = ansibleCommandService.runAnsibleRole(peMgmtIp.getValue(), null, role, roleVars,
                     ansibleVars);
             ansibleCommandService.initCommandStatus(siteCmdId);
         } catch (ManagedProcessException | IOException e) {
@@ -228,15 +348,28 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
             throw new AnsibleCommandException("Failed to configure site: " + site + "error: " + e);
         }
         return  executor.submit(() -> {
-            while (!ansibleCommandService.ansibleCommandSucceeded(siteCmdId)) {
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException e) {
-                    LOG.warn("Polling command {} was interrupted", siteCmdId);
-                }
+            while (!ansibleCommandService.isAnsibleComplete(siteCmdId)) {}
+            if (ansibleCommandService.ansibleCommandSucceeded(siteCmdId)) {
+                return siteCmdId;
+            } else {
+                return null;
             }
-            return siteCmdId;
         });
     }
 
+    private String randomRdRt() {
+        Random rand = new Random();
+        return String.valueOf(rand.nextInt(100) + 1) + ":" + String.valueOf(rand.nextInt(100) + 1);
+    }
+
+    private void determineRouteTargets(VrfAugmentation vrfAug) {
+        String rt;
+        try {
+            rt = vrfAug.getExportRouteTargets().getRouteTarget().getAs().toString() + ":" + vrfAug
+                    .getExportRouteTargets().getRouteTarget().getAsIndex().toString();
+        } catch (NullPointerException e) {
+            rt = randomRdRt();
+        }
+        routeTargets.put(vrfAug.getVrfName().getValue(), rt);
+    }
 }

@@ -21,6 +21,7 @@ public class AnsibleEvent {
     private int endLine;
     private int startLine;
     private String event;
+    private String runnerIdent;
 
     public AnsibleEvent(String uuid, ObjectNode eventData, String stdout) {
         this.uuid = uuid;
@@ -109,4 +110,13 @@ public class AnsibleEvent {
         this.event = event;
     }
 
+    @JsonProperty("runner_ident")
+    public String getRunnerIdent() {
+        return runnerIdent;
+    }
+
+    @JsonProperty("runner_ident")
+    public void setRunnerIdent(String runnerIdent) {
+        this.runnerIdent = runnerIdent;
+    }
 }
