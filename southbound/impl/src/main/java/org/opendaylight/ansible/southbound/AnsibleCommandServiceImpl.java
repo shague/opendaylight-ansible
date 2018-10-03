@@ -17,6 +17,7 @@ import com.google.common.base.Optional;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +63,7 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
         }
     };
     private final RetryingManagedNewTransactionRunner txRunner;
-    private static final String DEFAULT_PRIVATE_DIR = "/tmp/odl_ansible";
+    private static final String DEFAULT_PRIVATE_DIR = "/usr/share/opendaylight-ansible";
 
     @Inject
     public AnsibleCommandServiceImpl(@OsgiService final DataBroker dataBroker) {
@@ -111,27 +112,40 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
             dir = DEFAULT_PRIVATE_DIR;
         }
         // Ensure private directory is created
-        File directory = new File(dir);
+        // Ensure blank inventory exists (workaround to avoid ansible warning)
+        File directory = new File(new File(dir), "inventory");
         if (! directory.exists()) {
             boolean dirCreated = directory.mkdirs();
             if (!dirCreated) {
-                throw new IOException("Unable to create Ansible private directory: " + dir);
+                throw new IOException("Unable to create Ansible private directory and inventory subdir: " + dir);
             }
         }
+        File hostFile = new File(directory, "hosts.yaml");
+        if (!hostFile.exists()) {
+            if (!hostFile.createNewFile()) {
+                LOG.warn("Unable to create host inventory file in private directory: {}", hostFile);
+            }
+        }
+
         ManagedProcessBuilder ar = new ManagedProcessBuilder("ansible-runner").addArgument("-j")
-                .addArgument("--hosts").addArgument(host).addArgument("-r").addArgument(role);
-        ar = injectVars(ar, ROLEVAR, roleVars);
-        ar = injectVars(ar, ANSIBLEVAR, ansibleVars);
+                .addArgument("-r").addArgument(role);
+        ar = injectVars(ar, ROLEVAR, roleVars, null);
+        ar = injectVars(ar, ANSIBLEVAR, ansibleVars, host);
         ar.addArgument("run").addArgument(dir);
+        ar.getEnvironment().put("ANSIBLE_CLICONF_PLUGINS", Paths.get(dir,
+                "project/roles/ansible-network.network-engine/plugins/cliconf").toString());
         return runAnsible(ar);
     }
 
     private Uuid runAnsiblePlaybook(String host, String dir, String file, List<String> ansibleVars)
             throws ManagedProcessException {
         ManagedProcessBuilder ar = new ManagedProcessBuilder("ansible-runner").addArgument("-j")
-                .addArgument("--hosts").addArgument(host).addArgument("-p").addArgument(file);
-        ar = injectVars(ar, ANSIBLEVAR, ansibleVars);
+                .addArgument("-p").addArgument(file);
+        ar = injectVars(ar, ANSIBLEVAR, ansibleVars, host);
         ar.addArgument("run").addArgument(dir);
+        ar.getEnvironment().put("ANSIBLE_CLICONF_PLUGINS", Paths.get(dir,
+                "project/roles/ansible-network.network-engine/plugins/cliconf").toString());
+
         return runAnsible(ar);
     }
 
@@ -151,14 +165,16 @@ public class AnsibleCommandServiceImpl implements AnsibleCommandService {
         return uuid;
     }
 
-    private ManagedProcessBuilder injectVars(ManagedProcessBuilder builder, String varType, List<String> varList) {
+    private ManagedProcessBuilder injectVars(ManagedProcessBuilder builder, String varType, List<String> varList,
+                                             String host) {
         if (varList != null && ! varList.isEmpty()) {
             if (VAR_MAP.get(varType) == null) {
                 LOG.warn("Unable to determine variable types to add to ansible command {}", varType);
             } else {
                 builder.addArgument(VAR_MAP.get(varType));
                 if (varType.equals(ANSIBLEVAR)) {
-                    builder.addArgument("'-e" + " " + String.join(" ", varList) + "'", false);
+                    builder.addArgument("'-e" + " " + String.join(" ", varList) + "' -i " + host + ",",
+                            false);
                 } else {
                     builder.addArgument(String.join(" ", varList), false);
                 }

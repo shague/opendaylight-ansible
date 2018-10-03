@@ -443,6 +443,10 @@ module ietf-l3vpn-svc {
         description "L3VPN processing did not complete successfully and therefore
                 rollback is in progress.";
       }
+      enum delete-in-progress {
+        value 3;
+        description "L3VPN is being deleted";
+      }
       enum failed {
         value -1;
         description "L3VPN processing did not complete successfully and rollback completed
@@ -486,6 +490,15 @@ module ietf-l3vpn-svc {
 
   rpc commit-l3vpn-svc {
     description "Reads l3vpn-svc from config datastore, assigns version, and starts network
+        element configuration. Output is returned immediately after processing of intended l3vpn-svc started.
+        A progress of configuration can be found in root container status-l3vpn-provider.";
+    output {
+      uses version-fields;
+    }
+  }
+
+  rpc delete-l3vpn-svc {
+    description "Reads l3vpn-svc from config datastore, assigns version, and deletes network
         element configuration. Output is returned immediately after processing of intended l3vpn-svc started.
         A progress of configuration can be found in root container status-l3vpn-provider.";
     output {
