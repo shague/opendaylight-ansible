@@ -9,7 +9,7 @@
 package org.opendaylight.ansible.northbound;
 
 import static org.opendaylight.ansible.mdsalutils.Datastore.OPERATIONAL;
-import static org.opendaylight.ansible.northbound.api.AnsibleTopology.ANSIBLE_NODE_PATH;
+import static org.opendaylight.ansible.northbound.api.AnsibleTopology.ANSIBLE_LINK_PATH;
 
 import com.google.common.base.Optional;
 import javax.annotation.Nonnull;
@@ -25,15 +25,15 @@ import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.TopologyId;
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.Topology;
 import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.TopologyKey;
-import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.topology.Node;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.topology.Link;
 import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
 import org.ops4j.pax.cdi.api.OsgiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Singleton
-public class AnsibleNodeListener extends AbstractSyncDataTreeChangeListener<Node> {
-    private static final Logger LOG = LoggerFactory.getLogger(AnsibleNodeListener.class);
+public class AnsibleLinkListener extends AbstractSyncDataTreeChangeListener<Link> {
+    private static final Logger LOG = LoggerFactory.getLogger(AnsibleLinkListener.class);
     private final RetryingManagedNewTransactionRunner txRunner;
     private DataBroker dataBroker;
     private TopologyId flowId = new TopologyId("flow:1");
@@ -41,43 +41,43 @@ public class AnsibleNodeListener extends AbstractSyncDataTreeChangeListener<Node
             Topology.class, new TopologyKey(flowId));
 
     @Inject
-    public AnsibleNodeListener(@OsgiService final DataBroker dataBroker) {
-        super(dataBroker, LogicalDatastoreType.CONFIGURATION, ANSIBLE_NODE_PATH);
+    public AnsibleLinkListener(@OsgiService final DataBroker dataBroker) {
+        super(dataBroker, LogicalDatastoreType.CONFIGURATION, ANSIBLE_LINK_PATH);
         LOG.info("constructor");
         this.txRunner = new RetryingManagedNewTransactionRunner(dataBroker);
         this.dataBroker = dataBroker;
     }
 
     @Override
-    public void add(@Nonnull InstanceIdentifier<Node> instanceIdentifier, @Nonnull Node node) {
+    public void add(@Nonnull InstanceIdentifier<Link> instanceIdentifier, @Nonnull Link node) {
         LOG.info("add: id: {}\nnode: {}", instanceIdentifier, node);
         try {
-            Optional<Node> myNode = SingleTransactionDataBroker.syncReadOptional(dataBroker,
+            Optional<Link> myLink = SingleTransactionDataBroker.syncReadOptional(dataBroker,
                     LogicalDatastoreType.CONFIGURATION, instanceIdentifier);
-            if (myNode.isPresent()) {
-                LOG.info("Node found in configuration datastore");
+            if (myLink.isPresent()) {
+                LOG.info("Link found in configuration datastore");
 
                 txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx -> {
-                    tx.put(instanceIdentifier, myNode.get());
-                    LOG.info("Node written to oper: {}", myNode.get().getNodeId().getValue());
+                    tx.put(instanceIdentifier, myLink.get());
+                    LOG.info("Link written to oper: {}", myLink.get().getLinkId().getValue());
                 });
             } else {
-                LOG.error("Failed to read topology node from configuration during add");
+                LOG.error("Failed to read topology link from configuration during add");
             }
 
         } catch (ReadFailedException e) {
-            LOG.error("Error reading ansible node during add");
+            LOG.error("Error reading ansible link during add");
         }
     }
 
     @Override
-    public void remove(@Nonnull InstanceIdentifier<Node> instanceIdentifier, @Nonnull Node node) {
-        LOG.info("remove: id: {}\nnode: {}", instanceIdentifier, node);
+    public void remove(@Nonnull InstanceIdentifier<Link> instanceIdentifier, @Nonnull Link node) {
+        LOG.info("remove: id: {}\nlink: {}", instanceIdentifier, node);
     }
 
     @Override
-    public void update(@Nonnull InstanceIdentifier<Node> instanceIdentifier,
-                       @Nonnull Node oldNode, @Nonnull Node newNode) {
-        LOG.info("update: id: {}\nold node: {}\nold node: {}", instanceIdentifier, oldNode, newNode);
+    public void update(@Nonnull InstanceIdentifier<Link> instanceIdentifier,
+                       @Nonnull Link oldNode, @Nonnull Link newNode) {
+        LOG.info("update: id: {}\nold link: {}\nold link: {}", instanceIdentifier, oldNode, newNode);
     }
 }

@@ -36,6 +36,11 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
             <groupId>org.opendaylight.mdsal.model</groupId>
             <artifactId>ietf-topology</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.7</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -48,7 +53,8 @@ and is available at http://www.eclipse.org/legal/epl-v10.html
                     <instructions>
                         <Export-Package>
                             org.opendaylight.ansible.northbound.api,
-                            org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.*
+                            org.opendaylight.yang.gen.v1.urn.opendaylight.ansible.*,
+                            org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.aug.*
                         </Export-Package>
                     </instructions>
                 </configuration>
