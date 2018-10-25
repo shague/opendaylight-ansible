@@ -316,6 +316,7 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
             LOG.error("Missing site management IP address for site: {}", site);
             throw new L3vpnConfigException("Site management IP address is missing");
         }
+        String connectionType = "network_cli";
         deviceType = sitePeAccess.getDeviceType();
         if (deviceType == null) {
             LOG.error("Missing device type for site: {}", site);
@@ -324,14 +325,21 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
         if (deviceType.toLowerCase(Locale.ENGLISH).contains("cisco")) {
             provider = "ansible-network.cisco_ios";
             networkOS = "ios";
-        } else {
+        } else if (deviceType.toLowerCase(Locale.ENGLISH).contains("arista")) {
             provider = "ansible-network.arista_eos";
             networkOS = "eos";
+        } else if (deviceType.toLowerCase(Locale.ENGLISH).contains("juniper")) {
+            provider = "ansible-network.juniper_junos";
+            networkOS = "junos";
+            connectionType = "netconf";
+        } else {
+            provider = "";
+            networkOS = "";
         }
         ansibleVars = Arrays.asList(
                 "ansible_user=" + sitePeAccess.getUsername(),
                 "ansible_ssh_pass=" + sitePeAccess.getPassword(),
-                "ansible_connection=network_cli",
+                "ansible_connection=" + connectionType,
                 "ansible_network_os=" + networkOS,
                 "ansible_network_provider=" + provider,
                 "inventory_hostname=" + access.get(0).getSiteNetworkAccessId().getValue(),
