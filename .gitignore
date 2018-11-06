@@ -27,6 +27,7 @@ output.xml
 report.html
 *.swp
 *.swo
+*.swn
 target-ide/
 .tox
 .vagrant
