@@ -329,9 +329,14 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
             provider = "ansible-network.arista_eos";
             networkOS = "eos";
         } else if (deviceType.toLowerCase(Locale.ENGLISH).contains("juniper")) {
+<<<<<<< HEAD
             provider = "ansible-network.juniper_junos";
             networkOS = "junos";
             connectionType = "netconf";
+=======
+            provider = "juniper.junos";
+            networkOS = "junos";
+>>>>>>> aa4b1533c74ddb6a0789380f9eab9eb717c3aef4
         } else {
             provider = "";
             networkOS = "";
