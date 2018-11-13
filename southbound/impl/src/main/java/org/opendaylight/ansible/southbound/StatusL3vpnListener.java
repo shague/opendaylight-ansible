@@ -358,9 +358,16 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
         if (deviceType.toLowerCase(Locale.ENGLISH).contains("cisco")) {
             provider = "ansible-network.cisco_ios";
             networkOS = "ios";
-        } else {
+        } else if (deviceType.toLowerCase(Locale.ENGLISH).contains("arista")) {
             provider = "ansible-network.arista_eos";
             networkOS = "eos";
+        } else if (deviceType.toLowerCase(Locale.ENGLISH).contains("juniper")) {
+            provider = "ansible-network.juniper_junos";
+            networkOS = "junos";
+            connectionType = "netconf";
+        } else {
+            provider = "";
+            networkOS = "";
         }
         ansibleVars = Arrays.asList(
                 "ansible_user=" + siteMgmt.getUsername(),
