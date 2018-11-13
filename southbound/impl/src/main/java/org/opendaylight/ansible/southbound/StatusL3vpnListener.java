@@ -29,13 +29,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import javax.annotation.Nonnull;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import org.opendaylight.ansible.mdsalutils.Datastore;
 import org.opendaylight.ansible.mdsalutils.RetryingManagedNewTransactionRunner;
 import org.opendaylight.ansible.mdsalutils.SingleTransactionDataBroker;
+import org.opendaylight.ansible.mdsalutils.TypedReadWriteTransaction;
+import org.opendaylight.ansible.northbound.api.AnsibleTopology;
 import org.opendaylight.ansible.northbound.api.IetfL3vpnSvcUtils;
 import org.opendaylight.controller.md.sal.binding.api.DataBroker;
 import org.opendaylight.controller.md.sal.common.api.data.LogicalDatastoreType;
@@ -45,6 +49,7 @@ import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.inet.types.
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.L3vpnSvc;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.Status;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.StatusL3vpnProvider;
+import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.access.vpn.policy.vpn.attachment.attachment.flavor.VpnId;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.Sites;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.VpnServices;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.l3vpn.svc.rev170502.l3vpn.svc.fields.sites.Site;
@@ -54,6 +59,17 @@ import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.ietf.yang.types.
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.aug.rev170502.PeAugmentation;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.aug.rev170502.VrfAugmentation;
 import org.opendaylight.yang.gen.v1.urn.ietf.params.xml.ns.yang.l3vpn.svc.aug.rev170502.VrfName;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.aug.rev181015.MgmtAugmentation;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.LinkId;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.NodeId;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.TpId;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.link.attributes.Destination;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.link.attributes.DestinationBuilder;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.link.attributes.Source;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.link.attributes.SourceBuilder;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.topology.Link;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.topology.LinkBuilder;
+import org.opendaylight.yang.gen.v1.urn.tbd.params.xml.ns.yang.network.topology.rev131021.network.topology.topology.Node;
 import org.opendaylight.yangtools.yang.binding.InstanceIdentifier;
 import org.ops4j.pax.cdi.api.OsgiService;
 import org.slf4j.Logger;
@@ -70,6 +86,8 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
     private ListeningExecutorService executor;
     private static ListenableFuture<List<Uuid>> l3vpnCommands;
     private Map<String, String> routeTargets = new HashMap<>();
+    // Pe to VPN hashmap
+    private Map<PeAugmentation, String> vpnLinks = new ConcurrentHashMap<>();
 
     private enum State {
         PRESENT,
@@ -227,9 +245,12 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
                             IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, Status.Failed)
                     );
                 } else {
-                    txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx ->
-                            IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, Status.Complete)
-                    );
+                    txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx -> {
+                        LOG.info("L3VPN COMPLETE");
+                        IetfL3vpnSvcUtils.putStatusL3VPN(tx, COMMIT_VERSION, Status.Complete);
+                        LOG.info("Updating VPN links");
+                        updateVpnLink(tx, state, vpnServiceList.get(0).getVpnId().getValue());
+                    });
                 }
             } catch (InterruptedException | ExecutionException e) {
                 txRunner.callWithNewReadWriteTransactionAndSubmit(OPERATIONAL, tx ->
@@ -310,14 +331,26 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
                 "l3vpn_sites=" + roleSiteVar
                 );
 
+        // Find topology node for this site
+        NodeId nodeId = sitePeAccess.getPeNodeId();
+        if (nodeId == null) {
+            LOG.error("Missing PE node ID in site configuration for site: {}", site);
+            throw new L3vpnConfigException("PE topology node ID missing in site configuration");
+        }
+        Node siteNode = AnsibleTopology.getNode(nodeId, dataBroker);
+        if (siteNode == null) {
+            LOG.error("Unable to find matching topology node: {} specified for site: {}", nodeId, site);
+            throw new L3vpnConfigException("Cannot find topology node for PE in site");
+        }
+
         LOG.info("Role vars are: {}", roleVars);
-        Ipv4Address peMgmtIp = sitePeAccess.getPeMgmtIp();
+        MgmtAugmentation siteMgmt = siteNode.augmentation(MgmtAugmentation.class);
+        Ipv4Address peMgmtIp = siteMgmt.getPeMgmtIp();
         if (peMgmtIp == null) {
             LOG.error("Missing site management IP address for site: {}", site);
             throw new L3vpnConfigException("Site management IP address is missing");
         }
-        String connectionType = "network_cli";
-        deviceType = sitePeAccess.getDeviceType();
+        deviceType = siteMgmt.getDeviceType();
         if (deviceType == null) {
             LOG.error("Missing device type for site: {}", site);
             throw new L3vpnConfigException("Device type not specified for site");
@@ -329,22 +362,17 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
             provider = "ansible-network.arista_eos";
             networkOS = "eos";
         } else if (deviceType.toLowerCase(Locale.ENGLISH).contains("juniper")) {
-<<<<<<< HEAD
             provider = "ansible-network.juniper_junos";
             networkOS = "junos";
             connectionType = "netconf";
-=======
-            provider = "juniper.junos";
-            networkOS = "junos";
->>>>>>> aa4b1533c74ddb6a0789380f9eab9eb717c3aef4
         } else {
             provider = "";
             networkOS = "";
         }
         ansibleVars = Arrays.asList(
-                "ansible_user=" + sitePeAccess.getUsername(),
-                "ansible_ssh_pass=" + sitePeAccess.getPassword(),
-                "ansible_connection=" + connectionType,
+                "ansible_user=" + siteMgmt.getUsername(),
+                "ansible_ssh_pass=" + siteMgmt.getPassword(),
+                "ansible_connection=network_cli",
                 "ansible_network_os=" + networkOS,
                 "ansible_network_provider=" + provider,
                 "inventory_hostname=" + access.get(0).getSiteNetworkAccessId().getValue(),
@@ -363,6 +391,11 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
         return  executor.submit(() -> {
             while (!ansibleCommandService.isAnsibleComplete(siteCmdId)) {}
             if (ansibleCommandService.ansibleCommandSucceeded(siteCmdId)) {
+                String vpnId = ((VpnId) access.get(0).getVpnAttachment().getAttachmentFlavor()).getVpnId().getValue();
+                LOG.info("PE attachment for site {}, added to vpnlinks map for vpn: {}", site.getSiteId().getValue(),
+                        vpnId);
+                vpnLinks.put(sitePeAccess, vpnId);
+
                 return siteCmdId;
             } else {
                 return null;
@@ -384,5 +417,87 @@ public class StatusL3vpnListener extends AbstractSyncDataTreeChangeListener<Stat
             rt = randomRdRt();
         }
         routeTargets.put(vrfAug.getVrfName().getValue(), rt);
+    }
+
+    private void updateVpnLink(TypedReadWriteTransaction<? extends Datastore> tx, State state, String vpnId) {
+        // iterate vpn links hash map, find links that apply the current vpn, build link, update oper
+        LOG.info("In updating vpn link");
+        Link vpnLink;
+        Boolean remove = false;
+        NodeId ceNodeId;
+        // assuming here there is only 2 endpoints for a vpn for now
+        PeAugmentation peAug;
+        Source vpnSource;
+        Destination vpnDest;
+        LOG.info("Polling for vpn links now...");
+        for (ConcurrentHashMap.Entry<PeAugmentation, String> linkEntry : vpnLinks.entrySet()) {
+            if (linkEntry.getValue().equals(vpnId)) {
+                peAug = linkEntry.getKey();
+                ceNodeId = peAug.getCeNodeId();
+                LOG.info("Detected vpn PE link endpoint. Searching for CE node with id: {}", ceNodeId.getValue());
+                Node ceNode = AnsibleTopology.getNode(ceNodeId, dataBroker);
+                if (ceNode == null) {
+                    LOG.error("Unable to find CE node, will not update Topology");
+                    return;
+                }
+                // assume CE only has 1 interface
+                TpId ceTpId = ceNode.getTerminationPoint().get(0).getTpId();
+                if (ceTpId == null) {
+                    LOG.error("Unable to find CE TpId, will not update Topology");
+                    return;
+                }
+                LOG.info("Building new link for VPN between PE: {}, and CE: {}", peAug.getPeNodeId().getValue(),
+                        ceNodeId.getValue());
+                vpnSource = new SourceBuilder().setSourceTp(ceTpId).setSourceNode(ceNodeId).build();
+                vpnDest = new DestinationBuilder().setDestTp(peAug.getPe2CeTpId()).setDestNode(peAug.getPeNodeId())
+                        .build();
+                vpnLink = new LinkBuilder().setLinkId(new LinkId(ceNodeId.getValue())).setSource(vpnSource)
+                        .setDestination(vpnDest).build();
+                if (state == State.ABSENT) {
+                    remove = true;
+                    LOG.info("Removing previous VPN link between customer sites: {}", vpnLink.getLinkId().getValue());
+                } else {
+                    LOG.info("Populating new VPN link between customer sites: {}", vpnLink.getLinkId().getValue());
+                }
+                AnsibleTopology.populateLink(vpnLink, remove, tx);
+            }
+        }
+        LOG.info("Topology update complete for VPN: {}", vpnId);
+        /**
+         * The below was used to detect and create a VPN link between customer sites. It didn't show up well in the GUI
+         * when representing a an MPLS VPN, but it could be used in the future for building a point to point link
+         * between VPN sites
+        LOG.info("Finished vpnlink detection");
+        // This builds the CE source side of the link
+        ceSource = AnsibleTopology.getLinkPeer(peSource.getPeNodeId(), peSource.getPe2CeTpId(), dataBroker);
+        if (ceSource == null) {
+            LOG.error("Unable to determine CE source side of the link, will not update Topology");
+            return;
+        }
+        // Find the CE dest side of the link
+        ceDest = AnsibleTopology.getLinkPeer(peDest.getPeNodeId(), peDest.getPe2CeTpId(), dataBroker);
+        if (ceDest == null) {
+            LOG.error("Unable to determine CE dest side of the link, will not update Topology");
+            return;
+        }
+
+        // Found both sides of the link, build new link object
+        LOG.info("Topology updater: links for customer equipment found");
+        Source vpnSource = new SourceBuilder().setSourceTp(ceSource.getValue())
+                .setSourceNode(ceSource.getKey()).build();
+
+        Destination vpnDest = new DestinationBuilder().setDestNode(ceDest.getKey())
+                .setDestTp(ceDest.getValue()).build();
+
+        vpnLink = new LinkBuilder().setLinkId(new LinkId(vpnId)).setSource(vpnSource)
+                .setDestination(vpnDest).build();
+        if (state == State.ABSENT) {
+            remove = true;
+            LOG.info("Removing previous VPN link between customer sites: {}", vpnLink.getLinkId().getValue());
+        } else {
+            LOG.info("Populating new VPN link between customer sites: {}", vpnLink.getLinkId().getValue());
+        }
+        AnsibleTopology.populateLink(vpnLink, remove, tx);
+         **/
     }
 }

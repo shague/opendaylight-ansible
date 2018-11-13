@@ -111,6 +111,11 @@ module l3vpn-svc-aug {
       description "Provider Edge node-id from network-topology:network-topology/topology/pe/node/<node-id>.";
     }
 
+    leaf ce-node-id {
+      type nt:node-id;
+      description "Customer Equipment node-id";
+    }
+
     leaf pe-2-ce-tp-id {
       type nt:tp-id;
       description "Termination point on Provider Edge which connects Customer Edge.";
@@ -129,26 +134,6 @@ module l3vpn-svc-aug {
     leaf route-policy-out {
       type string;
       description "Route policy name to apply to outbound routes.";
-    }
-
-    leaf username {
-        type string;
-        description "login username.";
-    }
-
-    leaf password {
-        type string;
-        description "login password.";
-    }
-
-    leaf device-type {
-        type string;
-        description "The hardware device type.";
-    }
-
-    leaf pe-mgmt-ip {
-        type inet:ipv4-address;
-        description "Address for control plane management of the PE device";
     }
   }
 
